@@ -11,7 +11,14 @@ import os
 logger = logging.getLogger("paytm_seat_service")
 
 def get_conn_string() -> str:
-    url = os.getenv("DATABASE_URL") or settings.DATABASE_URL
+    url = (
+        os.getenv("DATABASE_URL")
+        or os.getenv("DATABASE_PRIVATE_URL")
+        or os.getenv("DATABASE_PUBLIC_URL")
+        or os.getenv("POSTGRES_URL")
+        or os.getenv("POSTGRES_PRIVATE_URL")
+        or settings.DATABASE_URL
+    )
     if url.startswith("postgresql+"):
         url = "postgresql" + url[url.index(":"):]
     return url
