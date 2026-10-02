@@ -5,10 +5,10 @@ from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 from utils.config import settings
 
-pool: AsyncConnectionPool | None = None
-
-
+import logging
 import os
+
+logger = logging.getLogger("paytm_seat_service")
 
 def get_conn_string() -> str:
     url = os.getenv("DATABASE_URL") or settings.DATABASE_URL
@@ -20,6 +20,8 @@ def get_conn_string() -> str:
 async def init_db_pool() -> None:
     global pool
     conn_str = get_conn_string()
+    safe_host = conn_str.split("@")[-1] if "@" in conn_str else "local"
+    logger.info(f"Initializing connection pool to database: {safe_host}")
     pool = AsyncConnectionPool(
         conninfo=conn_str,
         min_size=10,
