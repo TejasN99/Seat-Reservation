@@ -1,69 +1,46 @@
-# Technical Design & Concurrency Write-Up
+# Write-up: Architecture & Decisions
 
-## 1. The Atomic Decision Mechanism
+## The Atomic Decision
 
-### Why Read-Then-Write Fails
-A naive `SELECT status FROM seats WHERE ...` followed by an application-level `if status == 'AVAILABLE': UPDATE seats ...` produces double-sells under load because multiple concurrent transactions read the same `"AVAILABLE"` state before either commits.
+To handle high concurrency and avoid double-selling seats, I went with database-level pessimistic locking rather than trying to handle it in the application layer. 
 
-### Our Solution: Deterministic Row Locking (`SELECT ... FOR UPDATE`)
-We push the concurrency decision directly into PostgreSQL's ACID transaction engine using **pessimistic row-level locking**:
-1. **Sorted Lock Acquisition (Deadlock Prevention)**:
-   When reserving multiple seats (e.g. `["B2", "A1"]`), the service sorts the seat identifiers alphabetically (`["A1", "B2"]`) before issuing:
-   ```sql
-   SELECT id, seat_number, status
-   FROM seats
-   WHERE show_id = $1 AND seat_number = ANY($2)
-   ORDER BY seat_number ASC
-   FOR UPDATE;
-   ```
-   Because all concurrent transactions acquire row locks in the exact same global order, cyclic wait conditions (**deadlocks**) are mathematically impossible.
-2. **All-or-Nothing Evaluation**:
-   If any requested seat is missing or its locked status is not `'AVAILABLE'`, or if the user's active seat count exceeds `per_user_limit`, the transaction immediately aborts and returns a clean `409 Conflict`.
-3. **Atomic State Transition**:
-   If all conditions pass, `UPDATE seats SET status = 'CONFIRMED' WHERE id = ANY(...)` is executed and committed atomically in the same transaction.
+Doing a basic `SELECT` to check if a seat is free and then an `UPDATE` if it is will always fail under load because multiple concurrent requests will read the seat as available before any of them actually commit their updates. 
 
----
+Instead, I used `SELECT ... FOR UPDATE` inside a single transaction block. 
+For multi-seat bookings, there's a risk of deadlocks if two transactions try to lock the same seats in different orders (e.g., T1 locks A1 then B2, T2 locks B2 then A1). To prevent this, the code always sorts the seat IDs alphabetically before grabbing the locks. This guarantees everyone locks rows in the exact same order, which completely prevents deadlocks.
 
-## 2. Idempotency & Exactly-Once Semantics
+If any of the requested seats are already taken, or if the user goes over their booking limit, we just roll back the transaction and return a 409 Conflict. If everything looks good, we update the seats and commit.
 
-- **Storage**: Stored in the `idempotency_records` table with a unique primary key `idempotency_key`.
-- **Payload Integrity**: Every request computes a deterministic SHA-256 hash of the normalized payload (`show_id` + sorted seats).
-- **Execution Flow**:
-  1. **Replay (Success)**: If `idempotency_key` exists and `request_hash` matches $\to$ return stored `201 Created` response immediately with zero extra database modifications.
-  2. **Conflict (Mismatch)**: If `idempotency_key` exists but `request_hash` or `user_id` differs $\to$ reject immediately with `409 Conflict`.
-  3. **First-Time Execution**: Executed inside the atomic transaction and saved alongside the reservation.
+## Idempotency
 
----
+I created a separate `idempotency_records` table to handle this.
+When a request comes in, I hash the payload (show ID + the sorted seats). 
+If we see the idempotency key for the first time, we process the booking and save the key, the hash, and the JSON response in the same transaction as the reservation.
 
-## 3. Consistency vs. Availability Under Network Partitions (CAP Theorem)
+If we see a key again, we check the hash:
+- If the hash matches, it's a valid retry, and we just return the saved JSON response from the DB without trying to book again.
+- If the hash is different (meaning they used the same key for a different set of seats), we reject it with a 409 Conflict.
 
-- **Choice**: **Consistency over Availability (CP)**.
-- **Rationale**: In seat reservations and ticketing, selling the same physical seat twice (overbooking) causes irreparable business and customer harm. If a network partition occurs between database replicas or shards, we reject/fail-closed rather than risk split-brain double confirmations.
+## Consistency vs. Availability (CAP)
 
----
+For a ticketing system, Consistency is definitely more important than Availability (CP). Double-selling a seat is a huge customer service nightmare. If the database goes down or gets partitioned, it's better to fail the requests (fail closed) than to risk a split-brain scenario where two different nodes confirm the same seat to different people.
 
-## 4. Observability & 2 AM Alerting
+## Observability & Alerts
 
-### Prometheus Metrics Exposed (`/metrics`)
-- `reservations_confirmed_total{show_id}`: Total successful bookings.
-- `reservations_declined_total{show_id, reason}`: Rejections categorized by `seat_taken`, `per_user_limit`, or `idempotent_payload_conflict`.
-- `seats_available{show_id}` & `seats_confirmed{show_id}`: Real-time gauges reconciling total capacity.
+I added a `/metrics` endpoint for Prometheus. It tracks counters for confirmed reservations and declined ones (tagged by reason, like `seat_taken` or `limit_exceeded`), plus gauges for how many seats are left.
 
-### What We Get Paged For at 2 AM
-1. **Database Connectivity Failure (`/health/ready` returning 503)**: Immediate page — service cannot process ACID transactions.
-2. **5xx Error Rate > 0.1%**: System errors indicate unhandled edge cases or connection pool exhaustion (declines must be 4xx).
-3. **Reconciliation Invariant Breach**: If `available + confirmed != total_seats` for any show, trigger high-severity alert.
+If I were on call, I'd want to be paged for:
+- `/health/ready` failing (means the app can't talk to the database).
+- Any sudden spike in 5xx errors (meaning the code crashed or the DB connection pool is exhausted, since normal domain declines should always be 4xx).
+- The reconciliation invariant breaking (available + confirmed not equaling total seats).
 
----
+## AI Usage
 
-## 5. AI Usage Disclosure
+I used AI to help speed up the boilerplate work—stuff like generating the Pydantic schemas, and scaffolding the Prometheus metrics. I specifically designed the core logic myself, particularly the row-level locking, sorting for deadlock prevention, and the exact idempotency flow to ensure it meets the correctness requirements.
 
-- **Directed vs. Decided**: AI was used for rapid scaffolding of boilerplate (FastAPI routers, Pydantic schemas, Prometheus metrics setup). Architectural decisions — namely PostgreSQL pessimistic row-level locking with deterministic alphabetical sorting, the idempotency ledger design, all-or-nothing rollback semantics, and connection pool sizing — were deliberately designed to meet the exact correctness bar.
+## Future Improvements
 
----
-
-## 6. What We Would Do Next (Future Improvements)
-
-1. **Temporary Time-Boxed Holds (TTL)**: Implement a 5-minute hold mechanism using Postgres `held_until TIMESTAMPTZ` with lightweight conditional updates.
-2. **Tiered & Dynamic Seat Pricing**: Store category/tier pricing in `seats` and `reservation_seats`.
-3. **Database Read Replicas**: Route read-only show queries (`GET /shows/{id}`) to read replicas while keeping transactional reservations on the primary writer.
+If I had more time, I'd add:
+1. **Time-based Holds**: A way to hold a seat for 5 minutes while the user pays. I'd add a `held_until` timestamp column to handle this.
+2. **Read Replicas**: Pushing the `GET /shows/{id}` traffic to a read replica to take load off the primary database, since reads will likely outnumber writes.
+3. **Dynamic Pricing**: Support different pricing tiers for different seats (e.g., VIP vs regular).
