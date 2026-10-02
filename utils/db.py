@@ -8,8 +8,10 @@ from utils.config import settings
 pool: AsyncConnectionPool | None = None
 
 
+import os
+
 def get_conn_string() -> str:
-    url = settings.DATABASE_URL
+    url = os.getenv("DATABASE_URL") or settings.DATABASE_URL
     if url.startswith("postgresql+"):
         url = "postgresql" + url[url.index(":"):]
     return url
