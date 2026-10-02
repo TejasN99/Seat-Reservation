@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Paytm Seat Reservation System",
+    title="Seat Reservation System",
     version="1.0.0",
     description="High-concurrency, race-free seat reservation backend with exact-once idempotency semantics.",
     lifespan=lifespan

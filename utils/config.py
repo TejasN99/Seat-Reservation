@@ -4,7 +4,7 @@ from pydantic import Field
 
 
 class Settings(BaseSettings):
-    APP_NAME: str = "Paytm Seat Reservation Service"
+    APP_NAME: str = "Seat Reservation Service"
     DATABASE_URL: str = Field(
         default="postgresql://postgres:admin@localhost:5432/postgres",
         alias="DATABASE_URL"

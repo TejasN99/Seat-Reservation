@@ -23,7 +23,7 @@ async def init_db_pool() -> None:
         min_size=10,
         max_size=80,
         timeout=10.0,
-        kwargs={"row_factory": dict_row, "autocommit": False}
+        kwargs={"row_factory": dict_row, "autocommit": True}
     )
     await pool.open()
 
@@ -31,9 +31,9 @@ async def init_db_pool() -> None:
     if schema_path.exists():
         schema_sql = schema_path.read_text(encoding="utf-8")
         async with pool.connection() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute(schema_sql)
-            await conn.commit()
+            async with conn.transaction():
+                async with conn.cursor() as cur:
+                    await cur.execute(schema_sql)
 
 
 async def close_db_pool() -> None:

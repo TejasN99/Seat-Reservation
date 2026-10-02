@@ -10,6 +10,7 @@ from typing import Dict
 import httpx
 
 BASE_URL = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8000"
+BURST_SIZE = int(sys.argv[2]) if len(sys.argv) > 2 else 500
 
 
 class BurstStats:
@@ -61,8 +62,8 @@ async def run_burst():
         show_id = show["id"]
         print(f"✅ Created show '{show_name}' (ID: {show_id}) with {len(seats)} seats.")
 
-        # 3. SCENARIO A: Hot-Seat Storm (500 users competing for seat 'A1')
-        print(f"\n⚡ [Scenario A] Hot-Seat Storm: 500 concurrent buyers stampeding seat 'A1'...")
+        # 3. SCENARIO A: Hot-Seat Storm (BURST_SIZE users competing for seat 'A1')
+        print(f"\n⚡ [Scenario A] Hot-Seat Storm: {BURST_SIZE} concurrent buyers stampeding seat 'A1'...")
         start_a = time.perf_counter()
 
         async def storm_hot_seat(user_idx: int):
@@ -75,12 +76,12 @@ async def run_burst():
             except Exception as e:
                 stats.record(500, str(e))
 
-        await asyncio.gather(*(storm_hot_seat(i) for i in range(500)))
+        await asyncio.gather(*(storm_hot_seat(i) for i in range(BURST_SIZE)))
         dur_a = time.perf_counter() - start_a
-        print(f"   Completed 500 requests in {dur_a:.2f}s ({500/dur_a:.0f} req/s).")
+        print(f"   Completed {BURST_SIZE} requests in {dur_a:.2f}s ({BURST_SIZE/dur_a:.0f} req/s).")
 
-        # 4. SCENARIO B: Multi-Seat Random Contention (500 users requesting 2 random seats)
-        print(f"\n⚡ [Scenario B] Multi-Seat Contention: 500 concurrent buyers requesting 2 seats each...")
+        # 4. SCENARIO B: Multi-Seat Random Contention (BURST_SIZE users requesting 2 random seats)
+        print(f"\n⚡ [Scenario B] Multi-Seat Contention: {BURST_SIZE} concurrent buyers requesting 2 seats each...")
         import random
         start_b = time.perf_counter()
 
@@ -96,9 +97,9 @@ async def run_burst():
             except Exception as e:
                 stats.record(500, str(e))
 
-        await asyncio.gather(*(storm_multi_seats(i) for i in range(500)))
+        await asyncio.gather(*(storm_multi_seats(i) for i in range(BURST_SIZE)))
         dur_b = time.perf_counter() - start_b
-        print(f"   Completed 500 requests in {dur_b:.2f}s ({500/dur_b:.0f} req/s).")
+        print(f"   Completed {BURST_SIZE} requests in {dur_b:.2f}s ({BURST_SIZE/dur_b:.0f} req/s).")
 
         # 5. SCENARIO C: Idempotency Replay Test (100 parallel retries with SAME key)
         print(f"\n⚡ [Scenario C] Idempotency Storm: 100 parallel retries with the SAME key...")
