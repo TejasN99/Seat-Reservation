@@ -27,13 +27,13 @@ async def init_db_pool() -> None:
     )
     await pool.open()
 
-    # schema_path = Path(__file__).resolve().parent.parent / "db" / "schema.sql"
-    # if schema_path.exists():
-    #     schema_sql = schema_path.read_text(encoding="utf-8")
-    #     async with pool.connection() as conn:
-    #         async with conn.cursor() as cur:
-    #             await cur.execute(schema_sql)
-    #         await conn.commit()
+    schema_path = Path(__file__).resolve().parent.parent / "db" / "schema.sql"
+    if schema_path.exists():
+        schema_sql = schema_path.read_text(encoding="utf-8")
+        async with pool.connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(schema_sql)
+            await conn.commit()
 
 
 async def close_db_pool() -> None:

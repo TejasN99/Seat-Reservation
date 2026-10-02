@@ -6,7 +6,7 @@ from pydantic import Field
 class Settings(BaseSettings):
     APP_NAME: str = "Paytm Seat Reservation Service"
     DATABASE_URL: str = Field(
-        default="postgresql://postgres:postgrespassword@localhost:5432/seat_reservation",
+        default="postgresql://postgres:admin@localhost:5432/postgres",
         alias="DATABASE_URL"
     )
     DEFAULT_PER_USER_LIMIT: int = 4
