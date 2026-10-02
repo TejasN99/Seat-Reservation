@@ -31,9 +31,9 @@ async def init_db_pool() -> None:
     logger.info(f"Initializing connection pool to database: {safe_host}")
     pool = AsyncConnectionPool(
         conninfo=conn_str,
-        min_size=10,
-        max_size=80,
-        timeout=10.0,
+        min_size=1,
+        max_size=10,
+        timeout=30.0,
         kwargs={"row_factory": dict_row, "autocommit": True}
     )
     await pool.open()
