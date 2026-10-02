@@ -1,4 +1,4 @@
-# Paytm Money — Seat Reservation at Scale
+# Seat Reservation at Scale
 
 High-concurrency, race-free seat reservation backend built with **FastAPI**, **AsyncPG / Psycopg 3**, and **PostgreSQL**.
 
@@ -69,7 +69,7 @@ python burst.py https://seat-reservation-production-0196.up.railway.app
 ### Benchmark Output Format:
 ```text
 ===============================================================
-PAYTM SEAT RESERVATION - CONCURRENCY & RECONCILIATION BENCHMARK
+SEAT RESERVATION - CONCURRENCY & RECONCILIATION BENCHMARK
 Target URL: https://seat-reservation-production-0196.up.railway.app
 ===============================================================
 

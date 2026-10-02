@@ -1,5 +1,5 @@
 """
-Paytm Seat Reservation Concurrency & Burst Benchmark Tool
+Seat Reservation Concurrency & Burst Benchmark Tool
 Reproduces on-sale stampedes, hot-seat storms, idempotency replays, and reconciles state.
 """
 
@@ -55,7 +55,7 @@ async def run_burst():
     limits = httpx.Limits(max_keepalive_connections=50, max_connections=100)
     async with httpx.AsyncClient(base_url=BASE_URL, limits=limits, timeout=60.0) as client:
         print(f"\n===============================================================")
-        print(f"PAYTM SEAT RESERVATION - CONCURRENCY & RECONCILIATION BENCHMARK")
+        print(f"SEAT RESERVATION - CONCURRENCY & RECONCILIATION BENCHMARK")
         print(f"Target URL: {BASE_URL}")
         print(f"===============================================================\n")
 
