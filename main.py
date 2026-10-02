@@ -92,7 +92,7 @@ app.include_router(health_metrics_router)
 @app.get("/", tags=["Root"])
 async def root():
     return {
-        "service": "Paytm Seat Reservation API",
+        "service": "Seat Reservation API",
         "status": "online",
         "docs_url": "/docs"
     }
